@@ -1,25 +1,34 @@
-from flask import Flask, request, jsonify
-import tabula
+from fastapi import FastAPI, UploadFile, File
+import pandas as pd
+import camelot
 import os
+import uvicorn
 
-app = Flask(__name__)
+app = FastAPI()
 
-@app.route('/extract', methods=['POST'])
-def extract_pdf():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-    
-    file = request.files['file']
-    file_path = "temp.pdf"
-    file.save(file_path)
-    
+@app.post("/extract")
+async def extract_table(file: UploadFile = File(...)):
+    # File ko temporary save karein
+    with open("temp.pdf", "wb") as buffer:
+        buffer.write(await file.read())
+
     try:
-        # PDF se table extract karna
-        df = tabula.read_pdf(file_path, pages='all', multiple_tables=True, output_format="json")
-        os.remove(file_path) # File delete karein processing ke baad
-        return jsonify(df)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # PDF se table nikalna (flavor='stream' basic tables ke liye best hai)
+        tables = camelot.read_pdf("temp.pdf", pages='all', flavor='stream')
+        
+        all_tables_data = []
+        for table in tables:
+            # Dataframe ko list of dicts mein convert karein
+            all_tables_data.append(table.df.to_dict(orient='records'))
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+        os.remove("temp.pdf") # File delete karein
+        return {"status": "success", "data": all_tables_data}
+
+    except Exception as e:
+        if os.path.exists("temp.pdf"):
+            os.remove("temp.pdf")
+        return {"status": "error", "message": str(e)}
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
