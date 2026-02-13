@@ -1,4 +1,7 @@
-flask
-tabula-py
+fastapi
+python-multipart
+uvicorn
+camelot-py[cv]
+opencv-python-headless
+ghostscript
 pandas
-gunicorn
